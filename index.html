@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>WebXR Video Player - Herlev1</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #000;
+      overflow: hidden;
+      height: 100vh;
+      position: relative;
+    }
+    
+    #video-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    }
+    
+    #main-video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0;
+      transition: opacity 0.8s ease;
+    }
+    
+    #main-video.loaded {
+      opacity: 1;
+    }
+    
+    .video-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 1;
+      transition: opacity 0.5s ease;
+      pointer-events: none;
+    }
+    
+    .video-overlay.hidden {
+      opacity: 0;
+    }
+    
+    .play-button {
+      width: 80px;
+      height: 80px;
+      border: 3px solid rgba(255,255,255,0.9);
+      border-radius: 50%;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.3s ease;
+      pointer-events: auto;
+    }
+    
+    .play-button:hover {
+      transform: scale(1.1);
+      background: rgba(255,255,255,0.2);
+    }
+    
+    .play-button::after {
+      content: '';
+      width: 0;
+      height: 0;
+      border-left: 20px solid rgba(255,255,255,0.9);
+      border-top: 12px solid transparent;
+      border-bottom: 12px solid transparent;
+      margin-left: 4px;
+    }
+    
+    .ar-button {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      padding: 12px 24px;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      color: white;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      opacity: 0;
+      transform: translateY(-20px);
+      transition: all 0.4s ease;
+      z-index: 1000;
+      display: none;
+    }
+    
+    .ar-button.visible {
+      opacity: 1;
+      transform: translateY(0);
+      display: block;
+    }
+    
+    .ar-button:hover {
+      background: rgba(255,255,255,0.2);
+      transform: translateY(-2px);
+    }
+    
+    .ar-button.active {
+      background: rgba(0,255,128,0.2);
+      border-color: rgba(0,255,128,0.4);
+      color: #00ff80;
+    }
+    
+    .status {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(0,0,0,0.8);
+      color: white;
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-size: 14px;
+      z-index: 1001;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    }
+    
+    .status.visible {
+      opacity: 1;
+    }
+    
+    .exit-ar {
+      position: fixed;
+      top: 20px;
+      left: 20px;
+      width: 44px;
+      height: 44px;
+      background: rgba(255,255,255,0.1);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255,255,255,0.2);
+      border-radius: 12px;
+      color: white;
+      font-size: 24px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      transition: all 0.3s ease;
+    }
+    
+    .exit-ar:hover {
+      background: rgba(255,255,255,0.2);
+    }
+    
+    .ar-active .exit-ar {
+      display: flex;
+    }
+    
+    .ar-active #main-video {
+      opacity: 0.01;
+      width: 1px;
+      height: 1px;
+      position: absolute;
+    }
+    
+    .loading-indicator {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-size: 16px;
+      opacity: 1;
+      transition: opacity 0.5s ease;
+    }
+    
+    .loading-indicator.hidden {
+      opacity: 0;
+    }
+    
+    @media (max-width: 768px) {
+      .play-button {
+        width: 70px;
+        height: 70px;
+      }
+      
+      .play-button::after {
+        border-left-width: 18px;
+        border-top-width: 10px;
+        border-bottom-width: 10px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div id="video-container">
+    <video id="main-video" playsinline crossorigin="anonymous" preload="metadata">
+      <source src="Herlev1.mp4" type="video/mp4">
+    </video>
+    
+    <div class="loading-indicator" id="loading">Loading Herlev1.mp4...</div>
+    
+    <div class="video-overlay" id="video-overlay">
+      <div class="play-button" id="play-button"></div>
+    </div>
+  </div>
+  
+  <button class="ar-button" id="ar-button">View in AR</button>
+  <button class="exit-ar" id="exit-ar">×</button>
+  
+  <div class="status" id="status"></div>
+
+  <script type="module">
+    import * as THREE from 'https://unpkg.com/three@0.150.1/build/three.module.js';
+
+    // Core variables
+    let camera, scene, renderer, videoMesh, controllers = [], xrSession = null;
+    let videoTexture, videoMaterial;
+    let isPlaying = false;
+    let arSupported = false;
+    
+    // Controller state
+    let controllerState = [
+      { isPressed: false, pressStartTime: 0 },
+      { isPressed: false, pressStartTime: 0 }
+    ];
+    
+    // DOM elements
+    const mainVideo = document.getElementById('main-video');
+    const playButton = document.getElementById('play-button');
+    const videoOverlay = document.getElementById('video-overlay');
+    const arButton = document.getElementById('ar-button');
+    const exitButton = document.getElementById('exit-ar');
+    const statusEl = document.getElementById('status');
+    const loadingEl = document.getElementById('loading');
+    
+    function init() {
+      // Check WebXR support
+      checkARSupport();
+      
+      // Setup Three.js for AR mode
+      scene = new THREE.Scene();
+      camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
+      
+      renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.xr.enabled = true;
+      renderer.setClearColor(0x000000, 0);
+      renderer.domElement.style.position = 'absolute';
+      renderer.domElement.style.top = '0';
+      renderer.domElement.style.left = '0';
+      renderer.domElement.style.zIndex = '-1';
+      document.body.appendChild(renderer.domElement);
+      
+      // Setup video
+      setupVideo();
+      
+      // Load the Herlev1 video
+      mainVideo.load();
+      
+      // Event listeners
+      playButton.addEventListener('click', togglePlay);
+      arButton.addEventListener('click', enterAR);
+      exitButton.addEventListener('click', exitAR);
+      
+      mainVideo.addEventListener('loadeddata', onVideoLoaded);
+      mainVideo.addEventListener('loadstart', onVideoLoadStart);
+      mainVideo.addEventListener('error', onVideoError);
+      mainVideo.addEventListener('ended', onVideoEnded);
+      
+      window.addEventListener('resize', onWindowResize);
+      
+      showStatus('Loading Herlev1.mp4...');
+    }
+    
+    async function checkARSupport() {
+      if (!navigator.xr) return;
+      
+      try {
+        arSupported = await navigator.xr.isSessionSupported('immersive-ar');
+        if (arSupported) {
+          setTimeout(() => {
+            arButton.classList.add('visible');
+          }, 1500);
+        }
+      } catch (e) {
+        console.log('AR check failed:', e);
+      }
+    }
+    
+    function setupVideo() {
+      // Create video texture for AR mode
+      videoTexture = new THREE.VideoTexture(mainVideo);
+      videoTexture.minFilter = THREE.LinearFilter;
+      videoTexture.magFilter = THREE.LinearFilter;
+      videoTexture.format = THREE.RGBAFormat;
+      
+      videoMaterial = new THREE.MeshBasicMaterial({
+        map: videoTexture,
+        side: THREE.FrontSide
+      });
+      
+      // Create 2D panel geometry - adjust size based on video aspect ratio
+      const aspectRatio = 16 / 9; // Default, will update when video loads
+      const panelGeometry = new THREE.PlaneGeometry(2.4, 2.4 / aspectRatio);
+      
+      videoMesh = new THREE.Mesh(panelGeometry, videoMaterial);
+      videoMesh.position.set(0, 0, -1.5);
+      scene.add(videoMesh);
+      
+      // Ambient light for visibility
+      scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+    }
+    
+    function onVideoLoadStart() {
+      loadingEl.classList.remove('hidden');
+      showStatus('Loading video...');
+    }
+    
+    function onVideoLoaded() {
+      mainVideo.classList.add('loaded');
+      loadingEl.classList.add('hidden');
+      
+      // Update panel geometry based on actual video dimensions
+      if (mainVideo.videoWidth && mainVideo.videoHeight) {
+        const aspectRatio = mainVideo.videoWidth / mainVideo.videoHeight;
+        const newGeometry = new THREE.PlaneGeometry(2.4, 2.4 / aspectRatio);
+        videoMesh.geometry.dispose();
+        videoMesh.geometry = newGeometry;
+      }
+      
+      showStatus('Herlev1.mp4 ready - tap to play');
+    }
+    
+    function onVideoError() {
+      loadingEl.classList.add('hidden');
+      showStatus('Error loading Herlev1.mp4 - check file exists in repo');
+    }
+    
+    function onVideoEnded() {
+      isPlaying = false;
+      videoOverlay.classList.remove('hidden');
+      showStatus('Video ended');
+    }
+    
+    function togglePlay() {
+      if (isPlaying) {
+        mainVideo.pause();
+        isPlaying = false;
+        videoOverlay.classList.remove('hidden');
+        showStatus('Paused');
+      } else {
+        // Ensure audio is enabled
+        mainVideo.muted = false;
+        
+        mainVideo.play().then(() => {
+          isPlaying = true;
+          videoOverlay.classList.add('hidden');
+          const audioStatus = mainVideo.muted ? ' (muted)' : ' with audio';
+          showStatus('Playing' + audioStatus);
+        }).catch(err => {
+          // Try with muted first, then user can unmute
+          mainVideo.muted = true;
+          mainVideo.play().then(() => {
+            isPlaying = true;
+            videoOverlay.classList.add('hidden');
+            showStatus('Playing (tap to unmute)');
+            
+            // Try to unmute after a short delay
+            setTimeout(() => {
+              mainVideo.muted = false;
+              if (!mainVideo.muted) {
+                showStatus('Audio enabled');
+              }
+            }, 1000);
+          }).catch(err => {
+            showStatus('Playback failed: ' + err.message);
+          });
+        });
+      }
+    }
+    
+    async function enterAR() {
+      if (!arSupported) {
+        showStatus('AR not supported on this device');
+        return;
+      }
+      
+      // Check if video is loaded and ready
+      if (mainVideo.readyState < 2) {
+        showStatus('Video not ready yet - please wait');
+        return;
+      }
+      
+      try {
+        arButton.textContent = 'Starting AR...';
+        
+        const session = await navigator.xr.requestSession('immersive-ar', {
+          optionalFeatures: ['hand-tracking']
+        });
+        
+        await onSessionStarted(session);
+        
+      } catch (err) {
+        showStatus('Failed to start AR: ' + err.message);
+        arButton.textContent = 'View in AR';
+      }
+    }
+    
+    async function onSessionStarted(session) {
+      xrSession = session;
+      
+      // Hide regular UI
+      document.body.classList.add('ar-active');
+      arButton.classList.add('active');
+      arButton.textContent = 'AR Active';
+      
+      // Setup XR
+      renderer.xr.setReferenceSpaceType('local');
+      await renderer.xr.setSession(session);
+      
+      // Setup controllers
+      controllers = [0, 1].map(i => {
+        const controller = renderer.xr.getController(i);
+        controller.addEventListener('selectstart', () => handleControllerPress(i, true));
+        controller.addEventListener('selectend', () => handleControllerPress(i, false));
+        scene.add(controller);
+        return controller;
+      });
+      
+      // Start render loop
+      renderer.setAnimationLoop(render);
+      
+      // Session end handler
+      session.addEventListener('end', onSessionEnd);
+      
+      // Ensure video continues playing with audio in AR
+      if (!isPlaying && mainVideo.paused) {
+        mainVideo.muted = false;
+        try {
+          await mainVideo.play();
+          isPlaying = true;
+          showStatus('AR mode active - Herlev1 playing with audio');
+        } catch (err) {
+          mainVideo.muted = true;
+          await mainVideo.play();
+          isPlaying = true;
+          showStatus('AR mode active - tap controller to unmute');
+        }
+      } else {
+        mainVideo.muted = false;
+        showStatus('AR mode active - press controller trigger to play/pause');
+      }
+    }
+    
+    function handleControllerPress(controllerIndex, isPressed) {
+      const state = controllerState[controllerIndex];
+      
+      if (isPressed) {
+        state.isPressed = true;
+        state.pressStartTime = Date.now();
+      } else {
+        if (state.isPressed) {
+          const pressDuration = Date.now() - state.pressStartTime;
+          
+          if (pressDuration < 500) { // Short press
+            togglePlay();
+          }
+        }
+        
+        state.isPressed = false;
+        state.pressStartTime = 0;
+      }
+    }
+    
+    function exitAR() {
+      if (xrSession) {
+        xrSession.end();
+      }
+    }
+    
+    function onSessionEnd() {
+      // Restore normal UI
+      document.body.classList.remove('ar-active');
+      arButton.classList.remove('active');
+      arButton.textContent = 'View in AR';
+      
+      // Cleanup XR
+      renderer.setAnimationLoop(null);
+      xrSession = null;
+      
+      // Remove controllers
+      controllers.forEach(controller => scene.remove(controller));
+      controllers = [];
+      
+      showStatus('Exited AR mode');
+    }
+    
+    function render(timestamp, frame) {
+      // Update video texture
+      if (videoTexture) {
+        videoTexture.needsUpdate = true;
+      }
+      
+      // Keep panel facing user in AR
+      if (videoMesh && xrSession) {
+        const cameraDirection = new THREE.Vector3(0, 0, -1);
+        cameraDirection.applyQuaternion(camera.quaternion);
+        cameraDirection.multiplyScalar(1.5);
+        
+        const targetPosition = new THREE.Vector3().copy(camera.position).add(cameraDirection);
+        videoMesh.position.lerp(targetPosition, 0.05);
+        videoMesh.lookAt(camera.position);
+      }
+      
+      renderer.render(scene, camera);
+    }
+    
+    function showStatus(message) {
+      statusEl.textContent = message;
+      statusEl.classList.add('visible');
+      
+      clearTimeout(showStatus.timeout);
+      showStatus.timeout = setTimeout(() => {
+        statusEl.classList.remove('visible');
+      }, 3000);
+    }
+    
+    function onWindowResize() {
+      if (camera) {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+      }
+      if (renderer) {
+        renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+    }
+    
+    // Cleanup
+    window.addEventListener('beforeunload', () => {
+      if (xrSession) {
+        xrSession.end();
+      }
+    });
+    
+    // Initialize
+    init();
+  </script>
+</body>
+</html>
